@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<title>Test that a user activation in a document picture-in-picture window is usable in its opener window</title>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<script src="/resources/testdriver.js"></script>
+<script src="/resources/testdriver-vendor.js"></script>
+<body>
+<script>
+promise_test(async (t) => {
+  await test_driver.bless('request PiP window');
+  const pipWindow = await documentPictureInPicture.requestWindow();
+
+  assert_false(navigator.userActivation.isActive, 'the opener should initially not have user activation');
+  assert_false(pipWindow.navigator.userActivation.isActive, 'the PiP window should initially not have user activation');
+
+  // Attempting to use our test_driver to activate the document
+  // picture-in-picture window via:
+  //
+  // test_driver.bless('activate pip window', null, pipWindow);
+  //
+  // does not actually work, since under the hood the test_driver calculates the
+  // position of a button and then clicks that position in *our* window instead
+  // of in the picture-in-picture window, activating us instead.
+  // Below is another approach, which loads the testdriver scripts directly into
+  // the picture-in-picture window and then tries to bless with the
+  // picture-in-picture window's test_driver. This still does not work (neither
+  // window gets activated and the `await test_driver.bless(...);` call never
+  // completes), so I'm not actually sure how to activate the picture-in-picture
+  // window.
+  //
+  // I also tried running the script to call test_driver.bless() in the
+  // picture-in-picture window itself, but that had the same result as the
+  // attempt below.
+
+  // Add test_driver scripts to the document picture-in-picture window so we can
+  // activate it.
+  const scriptsLoadedPromise = new Promise(async (resolve) => {
+    let numLoaded=0;
+    let scriptLoaded = function() {
+      numLoaded++
+      if (numLoaded == 2) {
+        resolve();
+      }
+    };
+
+    const testDriverScript = pipWindow.document.createElement('script');
+    testDriverScript.setAttribute('src', '/resources/testdriver.js');
+    testDriverScript.addEventListener('load', scriptLoaded);
+    pipWindow.document.body.append(testDriverScript);
+
+    const testDriverVendorScript = pipWindow.document.createElement('script');
+    testDriverVendorScript.setAttribute('src', '/resources/testdriver-vendor.js');
+    testDriverVendorScript.addEventListener('load', scriptLoaded);
+    pipWindow.document.body.append(testDriverVendorScript);
+  });
+  await scriptsLoadedPromise;
+
+  await pipWindow.test_driver.bless('Activate the picture-in-picture window');
+
+  // Activating the picture-in-picture window should also activate the opener.
+  assert_true(navigator.userActivation.isActive, 'the opener should be activated when the PiP window is activated');
+  assert_true(pipWindow.navigator.userActivation.isActive, 'the PiP window should be activated');
+});
+</script>
