@@ -14,3 +14,5 @@ testDestroyWebNNBuffer('destroyTwice');
 testReadWebNNBuffer('read');
 
 testWriteWebNNBuffer('write');
+
+testDispatchWebNNBuffer('dispatch');
