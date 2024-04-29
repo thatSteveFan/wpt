@@ -16,7 +16,7 @@ from .base import (
 from .executorwebdriver import (
     WebDriverCrashtestExecutor,
     WebDriverFedCMProtocolPart,
-    WebDriverBidiProtocol,
+    WebDriverProtocol,
     WebDriverRefTestExecutor,
     WebDriverRun,
     WebDriverTestharnessExecutor,
@@ -202,12 +202,12 @@ class ChromeDriverFedCMProtocolPart(WebDriverFedCMProtocolPart):
                                                    self.fedcm_company_prefix + "/fedcm/confirmidplogin")
 
 
-class ChromeDriverProtocol(WebDriverBidiProtocol):
+class ChromeDriverProtocol(WebDriverProtocol):
     implements = [
         ChromeDriverFedCMProtocolPart,
         ChromeDriverPrintProtocolPart,
         ChromeDriverTestharnessProtocolPart,
-        *(part for part in WebDriverBidiProtocol.implements
+        *(part for part in WebDriverProtocol.implements
           if part.name != ChromeDriverTestharnessProtocolPart.name and
             part.name != ChromeDriverFedCMProtocolPart.name)
     ]

@@ -2,7 +2,6 @@
 
 (function() {
     const pending = new Map();
-    const event_target = new EventTarget();
 
     let result = null;
     let ctx_cmd_id = 0;
@@ -40,12 +39,6 @@
             if (is_test_context()) {
                 window.__wptrunner_process_next_event();
             }
-        } else if (data.type === "testdriver-event") {
-            const event_data = JSON.parse(data.message);
-            const event_name = event_data.method;
-            const event = new Event(event_name);
-            event.payload = event_data.params;
-            event_target.dispatchEvent(event);
         }
     });
 
@@ -132,22 +125,22 @@
         return selector;
     };
 
-    /**
-     * Create an action and return a promise that resolves when the action is complete.
-     * @param name: The name of the action to create.
-     * @param props: The properties to pass to the action.
-     * @return {Promise<any>}: A promise that resolves with the action result when the action is complete.
-     */
     const create_action = function(name, props) {
         let cmd_id;
         const action_msg = {type: "action",
                             action: name,
                             ...props};
+        if (action_msg.context) {
+          action_msg.context = get_window_id(action_msg.context);
+        }
         if (is_test_context()) {
             cmd_id = window.__wptrunner_message_queue.push(action_msg);
         } else {
             if (testharness_context === null) {
                 throw new Error("Tried to run in a non-testharness window without a call to set_test_context");
+            }
+            if (action_msg.context === null) {
+                action_msg.context = get_window_id(window);
             }
             cmd_id = ctx_cmd_id++;
             action_msg.cmd_id = cmd_id;
@@ -167,49 +160,7 @@
         return pending_promise;
     };
 
-    /**
-     * Create an action in a specific context and return a promise that resolves when the action is complete. This is
-     * required for WebDriver Classic actions, as they require a specific context.
-     * @param name: The name of the action to create.
-     * @param context: The context in which to run the action. `null` for the current window.
-     * @param props: The properties to pass to the action.
-     * @return {Promise<any>}: A promise that resolves with the action result when the action is complete.
-     */
-    const create_context_action = function (name, context, props) {
-        const context_props = {...props};
-        if (context) {
-            context_props.context = get_window_id(context);
-        }
-        if (context === null && !is_test_context()) {
-            context_props.context = get_window_id(window);
-        }
-        return create_action(name, context_props);
-    };
-
-    const subscribe = function (props) {
-        return create_action("bidi.session.subscribe", {
-            // Default to subscribing to the window's events.
-            contexts: [window],
-            ...props
-        });
-    };
-
     window.test_driver_internal.in_automation = true;
-
-    window.test_driver_internal.bidi.log.entry_added.subscribe = function (props) {
-        return subscribe({
-            ...(props ?? {}),
-            events: ["log.entryAdded"]
-        })
-    };
-
-    window.test_driver_internal.bidi.log.entry_added.on = function (callback) {
-        const on_event = (event)=> {
-            callback(event.payload);
-        };
-        event_target.addEventListener("log.entryAdded", on_event);
-        return () => event_target.removeEventListener("log.entryAdded", on_event);
-    };
 
     window.test_driver_internal.set_test_context = function(context) {
         if (window.__wptrunner_message_queue) {
@@ -221,49 +172,49 @@
     window.test_driver_internal.click = function(element) {
         const selector = get_selector(element);
         const context = get_context(element);
-        return create_context_action("click", context, {selector});
+        return create_action("click", {selector, context});
     };
 
     window.test_driver_internal.delete_all_cookies = function(context=null) {
-        return create_context_action("delete_all_cookies", context, {});
+        return create_action("delete_all_cookies", {context});
     };
 
     window.test_driver_internal.get_all_cookies = function(context=null) {
-        return create_context_action("get_all_cookies", context, {});
+        return create_action("get_all_cookies", {context});
     };
 
     window.test_driver_internal.get_computed_label = function(element) {
         const selector = get_selector(element);
         const context = get_context(element);
-        return create_context_action("get_computed_label", context, {selector});
+        return create_action("get_computed_label", {selector, context});
     };
 
     window.test_driver_internal.get_computed_role = function(element) {
         const selector = get_selector(element);
         const context = get_context(element);
-        return create_context_action("get_computed_role", context, {selector});
+        return create_action("get_computed_role", {selector, context});
     };
 
     window.test_driver_internal.get_named_cookie = function(name, context=null) {
-        return create_context_action("get_named_cookie", context, {name});
+        return create_action("get_named_cookie", {name, context});
     };
 
     window.test_driver_internal.minimize_window = function(context=null) {
-        return create_context_action("minimize_window", context, {});
+        return create_action("minimize_window", {context});
     };
 
     window.test_driver_internal.set_window_rect = function(rect, context=null) {
-        return create_context_action("set_window_rect", context, {rect});
+        return create_action("set_window_rect", {rect, context});
     };
 
     window.test_driver_internal.get_window_rect = function(context=null) {
-        return create_context_action("get_window_rect", context, {});
+        return create_action("get_window_rect", {context});
     };
 
     window.test_driver_internal.send_keys = function(element, keys) {
         const selector = get_selector(element);
         const context = get_context(element);
-        return create_context_action("send_keys", context, {selector, keys});
+        return create_action("send_keys", {selector, keys, context});
     };
 
     window.test_driver_internal.action_sequence = function(actions, context=null) {
@@ -282,99 +233,99 @@
                 }
             }
         }
-        return create_context_action("action_sequence", context, {actions});
+        return create_action("action_sequence", {actions, context});
     };
 
     window.test_driver_internal.generate_test_report = function(message, context=null) {
-        return create_context_action("generate_test_report", context, {message});
+        return create_action("generate_test_report", {message, context});
     };
 
     window.test_driver_internal.set_permission = function(permission_params, context=null) {
-        return create_context_action("set_permission", context, {permission_params});
+        return create_action("set_permission", {permission_params, context});
     };
 
     window.test_driver_internal.add_virtual_authenticator = function(config, context=null) {
-        return create_context_action("add_virtual_authenticator", context, {config});
+        return create_action("add_virtual_authenticator", {config, context});
     };
 
     window.test_driver_internal.remove_virtual_authenticator = function(authenticator_id, context=null) {
-        return create_context_action("remove_virtual_authenticator", context, {authenticator_id});
+        return create_action("remove_virtual_authenticator", {authenticator_id, context});
     };
 
     window.test_driver_internal.add_credential = function(authenticator_id, credential, context=null) {
-        return create_context_action("add_credential", context, {authenticator_id, credential});
+        return create_action("add_credential", {authenticator_id, credential, context});
     };
 
     window.test_driver_internal.get_credentials = function(authenticator_id, context=null) {
-        return create_context_action("get_credentials", context, {authenticator_id});
+        return create_action("get_credentials", {authenticator_id, context});
     };
 
     window.test_driver_internal.remove_credential = function(authenticator_id, credential_id, context=null) {
-        return create_context_action("remove_credential", context, {authenticator_id, credential_id});
+        return create_action("remove_credential", {authenticator_id, credential_id, context});
     };
 
     window.test_driver_internal.remove_all_credentials = function(authenticator_id, context=null) {
-        return create_context_action("remove_all_credentials", context, {authenticator_id});
+        return create_action("remove_all_credentials", {authenticator_id, context});
     };
 
     window.test_driver_internal.set_user_verified = function(authenticator_id, uv, context=null) {
-        return create_context_action("set_user_verified", context, {authenticator_id, uv});
+        return create_action("set_user_verified", {authenticator_id, uv, context});
     };
 
     window.test_driver_internal.set_spc_transaction_mode = function(mode, context = null) {
-        return create_context_action("set_spc_transaction_mode", context, {mode});
+        return create_action("set_spc_transaction_mode", {mode, context});
     };
 
     window.test_driver_internal.set_rph_registration_mode = function(mode, context = null) {
-        return create_context_action("set_rph_registration_mode", context, {mode});
+        return create_action("set_rph_registration_mode", {mode, context});
     };
 
     window.test_driver_internal.cancel_fedcm_dialog = function(context = null) {
-        return create_context_action("cancel_fedcm_dialog", context, {});
+        return create_action("cancel_fedcm_dialog", {context});
     };
 
     window.test_driver_internal.click_fedcm_dialog_button = function(dialog_button, context = null) {
-        return create_context_action("click_fedcm_dialog_button", context, {dialog_button});
+        return create_action("click_fedcm_dialog_button", {dialog_button, context});
     };
 
     window.test_driver_internal.select_fedcm_account = function(account_index, context = null) {
-        return create_context_action("select_fedcm_account", context, {account_index});
+        return create_action("select_fedcm_account", {account_index, context});
     };
 
     window.test_driver_internal.get_fedcm_account_list = function(context = null) {
-        return create_context_action("get_fedcm_account_list", context, {});
+        return create_action("get_fedcm_account_list", {context});
     };
 
     window.test_driver_internal.get_fedcm_dialog_title = function(context = null) {
-        return create_context_action("get_fedcm_dialog_title", context, {});
+        return create_action("get_fedcm_dialog_title", {context});
     };
 
     window.test_driver_internal.get_fedcm_dialog_type = function(context = null) {
-        return create_context_action("get_fedcm_dialog_type", context, {});
+        return create_action("get_fedcm_dialog_type", {context});
     };
 
     window.test_driver_internal.set_fedcm_delay_enabled = function(enabled, context = null) {
-        return create_context_action("set_fedcm_delay_enabled", context, {enabled});
+        return create_action("set_fedcm_delay_enabled", {enabled, context});
     };
 
     window.test_driver_internal.reset_fedcm_cooldown = function(context = null) {
-        return create_context_action("reset_fedcm_cooldown", context, {});
+        return create_action("reset_fedcm_cooldown", {context});
     };
 
     window.test_driver_internal.create_virtual_sensor = function(sensor_type, sensor_params={}, context=null) {
-        return create_context_action("create_virtual_sensor", context, {sensor_type, sensor_params});
+        return create_action("create_virtual_sensor", {sensor_type, sensor_params, context});
     };
 
     window.test_driver_internal.update_virtual_sensor = function(sensor_type, reading, context=null) {
-        return create_context_action("update_virtual_sensor", context, {sensor_type, reading});
+        return create_action("update_virtual_sensor", {sensor_type, reading, context});
     };
 
     window.test_driver_internal.remove_virtual_sensor = function(sensor_type, context=null) {
-        return create_context_action("remove_virtual_sensor", context, {sensor_type});
+        return create_action("remove_virtual_sensor", {sensor_type, context});
     };
 
     window.test_driver_internal.get_virtual_sensor_information = function(sensor_type, context=null) {
-        return create_context_action("get_virtual_sensor_information", context, {sensor_type});
+        return create_action("get_virtual_sensor_information", {sensor_type, context});
     };
 
     window.test_driver_internal.set_device_posture = function(posture, context=null) {

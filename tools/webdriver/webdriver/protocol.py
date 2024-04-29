@@ -4,6 +4,7 @@ import json
 
 import webdriver
 
+
 """WebDriver wire protocol codecs."""
 
 
@@ -23,11 +24,6 @@ class Encoder(json.JSONEncoder):
             return {webdriver.ShadowRoot.identifier: obj.id}
         elif isinstance(obj, webdriver.WebWindow):
             return {webdriver.WebWindow.identifier: obj.id}
-        # Support for arguments received via BiDi.
-        # https://github.com/web-platform-tests/rfcs/blob/master/rfcs/testdriver_bidi.md
-        elif isinstance(obj, webdriver.bidi.protocol.BidiValue):
-            return obj.to_classic_protocol_value()
-
         return super().default(obj)
 
 
