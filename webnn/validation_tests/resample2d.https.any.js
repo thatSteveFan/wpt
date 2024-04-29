@@ -76,6 +76,11 @@ const tests = [
     options: {sizes: [1, 1, 4, 6]},
   },
   {
+    name: '[resample2d] Throw if input data type is not floating type',
+    input: {dataType: 'int32', dimensions: [1, 1, 2, 4]},
+    options: {sizes: [1, 1, 4, 6]},
+  },
+  {
     name:
         '[resample2d] Throw if any size value is out of \'unsigned long\' value range',
     input: {dataType: 'float32', dimensions: [1, 1, 2, 4]},
