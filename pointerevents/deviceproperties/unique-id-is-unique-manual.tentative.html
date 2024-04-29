@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<!--
+   Tentative; contingent on merge of:
+   https://github.com/w3c/pointerevents/pull/495
+
+   This manual test validates the behavior of PointerEvent.deviceProperties.uniqueId.
+   Specifically, this test ensures that pointing devices get their own unique id, and
+   that the unique id is persistent over the session.
+
+   In order to run this test, it is necessary to have multiple pointing devices that support
+   unique id; such as a pen and a mouse. Please follow the instructions exactly as written
+   in order to ensure the correct results are obtained.
+-->
+<title>DeviceProperties.uniqueId is unique for pointer events from different devices</title>
+<script src="/resources/testharness.js"></script>
+<script src="/resources/testharnessreport.js"></script>
+<style>
+    #testarea {
+        width: 300px;
+        height: 300px;
+        background-color: #00ff00;
+        touch-action: none;
+    }
+    #instructions {
+        display: inline-block;
+        border-right: 1px solid black;
+        padding-right: 10px;
+        width: 600px;
+    }
+    #testcontainer {
+        display: inline-block;
+        width: 300px;
+    }
+
+    #radioButtonContainer {
+        margin-top: 30px;
+        font-size: 30px;
+    }
+
+    #currentuniqueid {
+        display: inline-block;
+    }
+
+    #adddevice {
+        height: 60px;
+        width: 100px;
+    }
+
+    p {
+        padding-bottom: 10px;
+    }
+
+    input {
+        height: 40px;
+        width: 40px;
+    }
+
+    html {
+        font-family: Arial, Helvetica, sans-serif;
+    }
+</style>
+<html>
+    <div id="instructions">
+        <h2>Instructions</h2>
+        <p>1. With a pointing device (pointing device #1), click the Add Device button. </p>
+        <p>2. With pointing device #1, click on the radio button that appears. This radio button corresponds to the pointing device used when clicking "Add Device". </p>
+        <p>3. Trace the circle with pointing device #1. If it is a mouse, simply trace the circle. If pen, trace the circle with the pen in contact with the screen.</p>
+        <p>4. With a NEW pointing device (pointing device #2), click the Add Device button. </p>
+        <p>5. With pointing device #2, click on the radio button that appears. This radio button corresponds to the pointing device used when clicking "Add Device". </p>
+        <p>6. Trace the circle with pointing device #2. If it is a mouse, simply trace the circle. If pen, trace the circle with the pen in contact with the screen.</p>
+        <p>7. Using pointing device #1, select the radio button corresponding to that pointing device.</p>
+        <p>8. Trace the circle with pointing device #1. If it is a mouse, simply trace the circle. If pen, trace the circle with the pen in contact with the screen.</p>
+        <p>9. Using pointing device #2, select the radio button corresponding to that pointing device.</p>
+        <p>10. Trace the circle with pointing device #2. If it is a mouse, simply trace the circle. If pen, trace the circle with the pen in contact with the screen.</p>
+        <p>11. Click finish and verify the test passes. There should be 4 passing test cases. </p>
+    </div>
+    <div id="testcontainer">
+        <div>
+            Current pointer's unique id: <p id="currentuniqueid"></p>
+        </div>
+        <div id="testarea">
+            Trace the Circle.
+            <svg height="250" width="300" xmlns="http://www.w3.org/2000/svg">
+                <circle r="100" cx="150" cy="110" fill="none" stroke="red" stroke-width="10" />
+            </svg>
+        </div>
+
+        <p>Click the button below using a new pointer device for the session.</p>
+        <button onclick="AddDevice()" id="adddevice">Add Device</button>
+
+        <div id="radioButtonContainer"></div>
+
+        <p>Click on the button below after completing. If a "PASS" result appears the test
+        passes, otherwise it fails</p>
+        <button onclick="Finish()">Finish Test</button>
+    </div>
+</html>
+
+<script>
+    const radioGroupName = "unique-ids";
+    // List of testharness tests that will be evaluated at the press of the finish button.
+    let testList = [];
+    // Map with key: PointerEvent.deviceProperties.uniqueId, value: uniqueIdCounter
+    let uniqueIdMap = new Map();
+    // The assigned value in uniqueIdMap to a device's uniqueId. This is a counter and
+    // increments every time a new device is added.
+    let uniqueIdCounter = 0;
+    // This prevents the testharness tests from constantly being evaluated for all pointer events.
+    let checkUniqueId = false;
+
+    // Function to create a new radio button. The radio buttons will
+    // be used by the tester to indicate which device is currently being used;
+    // and therefore which `uniqueId` to expect.
+    function createRadioButton(name, value) {
+        const radioButton = document.createElement("input");
+        radioButton.type = "radio";
+        radioButton.name = name;
+        radioButton.value = value;
+        radioButton.onclick = () => {checkUniqueId = true};
+        return radioButton;
+    }
+
+    // Adds the radio button to the page along with a label that depicts
+    // which device the radio button belongs to.
+    function AddRadioButton(value) {
+        const container = document.getElementById("radioButtonContainer");
+        const newRadioButton = createRadioButton(radioGroupName, value);
+        container.appendChild(newRadioButton);
+        const label = document.createElement("label");
+        label.textContent = "Device #" + value;
+        container.appendChild(label);
+        const br = document.createElement("br");
+        container.appendChild(br);
+    }
+
+    // This function queries the current selected radio button and
+    // returns not the unique id, but the expected mapping to the id - represented
+    // by `uniqueIdCounter`.
+    function getSelectedRadioButtonValue() {
+        const radioButtons = document.querySelectorAll(`input[type="radio"][name="${radioGroupName}"]`);
+        for (const radioButton of radioButtons) {
+            if (radioButton.checked) {
+                return Number(radioButton.value);
+            }
+        }
+        return null;
+    }
+
+    setup({explicit_timeout: true});
+
+    // Reads the deviceProperties.uniqueId of a pointer event, and adds it
+    // to uniqueIdMap if it's a valid value. Also runs a testharness test
+    // to ensure that the entry in uniqueIdMap uniqueId matches the selected
+    // radio button.
+    function CheckDeviceId(event) {
+        if (checkUniqueId && event.deviceProperties) {
+            const uniqueId = event.deviceProperties.uniqueId;
+            let uidElement = document.getElementById("currentuniqueid");
+            uidElement.innerText = uniqueId ? uniqueId : "Unknown";
+            if (!uniqueId) {
+                return;
+            }
+            if (uniqueIdMap.has(uniqueId)) {
+                // Check that the unique id is consistent.
+                const expectedId = getSelectedRadioButtonValue();
+                if (expectedId) {
+                    // Create an async test that will verify the unique id is
+                    // expected based on the radio button option selected.
+                    testList.push(async_test(function() {
+                        assert_equals(expectedId, uniqueIdMap.get(uniqueId));
+                    }, "Expected unique ids to be equal - " + testList.length));
+                    checkUniqueId = false;
+                }
+            } else {
+                uniqueIdMap.set(uniqueId, uniqueIdCounter);
+            }
+        }
+    }
+
+    // If the deviceProperties.uniqueId could not be identified for the duration
+    // of the stroke, let the user know that their device is not suitable for the test.
+    function CheckDeviceIdOnPointerUp(event) {
+        CheckDeviceId(event);
+        if (uniqueIdCounter != uniqueIdMap.size) {
+            alert("A previous pointing device's unique id was not identifiable. Please restart the test with different devices.");
+        }
+    }
+
+    function AddDevice() {
+        checkUniqueId = true;
+        AddRadioButton(++uniqueIdCounter);
+    }
+
+    // Evaluate the testharness tests when the finish button is clicked.
+    function Finish() {
+        for (test of testList) {
+            test.done();
+        }
+    }
+
+    testarea.addEventListener("pointerdown", CheckDeviceId, false);
+    testarea.addEventListener("pointermove", CheckDeviceId, false);
+    testarea.addEventListener("pointerup", CheckDeviceIdOnPointerUp, false);
+</script>
